@@ -1,18 +1,18 @@
-from gameLib.fighter import Fighter
-from tools.game_pos import CommonPos, BreakthroughPos
-
-import tools.utilities as ut
 import sys
 import time
+
+import tools.utilities as ut
+from gameLib.fighter import Fighter
+from tools.game_pos import BreakthroughPos
 
 
 class Breakthrough(Fighter):
     '''结界突破，参数mode, emyc'''
 
-    def __init__(self, emyc=0, hwnd=0, max_victories=30, activate=True):
+    def __init__(self, emyc=0, hwnd=0, max_tasks=30, activate=True):
         # 初始化
         Fighter.__init__(self, 'Breakthrough: ', emyc, hwnd, activate)
-        self.max_victories = max_victories
+        self.max_tasks = max_tasks
 
     def valid_position(self, target_pos):
         # 获取突破位置可点击的有效区域
@@ -47,6 +47,8 @@ class Breakthrough(Fighter):
         return result
 
     def refresh(self):
+        if not self.run:
+            return
         # 等待倒计时刷新按钮激活，然后刷新
         self.yys.wait_game_img('img\\SHUA-XIN.png', max_time=300, quit=True)
         # 点击刷新按钮直到确认刷新出现
@@ -55,6 +57,37 @@ class Breakthrough(Fighter):
         # 点击确认
         self.click_until('确认按钮', 'img\\QUE-REN-SHUA-XIN.png',
                          *BreakthroughPos.confirm_btn, 2, False)
+
+    def fight_and_quit(self, target_pos, mood):
+        # 点击有效位置，直到可以进攻按钮
+        self.click_until('突破目标', 'img\\JIN-GONG.png', *self.valid_position(target_pos),
+                         step_time=mood.get1mood() / 1000, appear=True, point=0.9)
+
+        time.sleep(1)
+
+        # 点击进攻，开始突破
+        self.click_until('进攻', 'img\\JIN-GONG.png', *self.attack_position(target_pos), step_time=mood.get1mood() / 1000,
+                         appear=False, point=0.9)
+
+        # 检测是否进入战斗
+        self.check_battle()
+
+        # 退出战斗
+        self.click_until('退出按钮', 'img\\QUE-REN-TUI-CHU.png', *BreakthroughPos.quit_btn,
+                         step_time=mood.get1mood() / 1000, appear=True, point=0.9)
+        self.click_until('确认退出', 'img\\QUE-REN-TUI-CHU.png', *BreakthroughPos.confirm_quit_btn,
+                         step_time=mood.get1mood() / 1000, appear=False, point=0.9)
+
+        # 检测突破结果
+        result = self.check_result()
+        if result == 0:
+            return False
+
+        # 点击知道结算成功
+        self.click_until('结算', 'img\\JIE-JIE-TU-PO.png', *BreakthroughPos.jiesuan_position, mood.get1mood() / 1000)
+
+        return result
+
 
 
     def fighting(self, target_pos, mood):
@@ -75,7 +108,7 @@ class Breakthrough(Fighter):
         # 点击有效位置，直到可以进攻按钮
         self.click_until('突破目标', 'img\\JIN-GONG.png', *self.valid_position(target_pos), step_time= mood.get1mood()/1000, appear=True, point=0.9)
 
-        time.sleep(2)
+        time.sleep(1)
 
         # 点击进攻，开始突破
         self.click_until('进攻', 'img\\JIN-GONG.png', *self.attack_position(target_pos), step_time= mood.get1mood()/1000, appear=False, point=0.9)
@@ -100,13 +133,22 @@ class Breakthrough(Fighter):
 
         # 战斗主循环
         while self.run:
+            # 最大任务数小于3就不进行下一轮了
+            if self.max_tasks < 3:
+                self.log.writewarning("突破任务结束")
+                break
             # 检测是否在结界突破页面
             self.check_breakthrough()
+
+            # 秒退一次，为了保持当前突破等级
+            self.fight_and_quit(BreakthroughPos.target_position[8], mood)
 
             # 成功突破次数
             victories = 0
             # 循环突破9次，直到满足成功次数或循环结束
             for i in range(9):
+                if not self.run:
+                    break
                 if victories >= 3:
                     self.log.writeinfo('成功突破:'+str(victories)+'次，等待新的一轮')
                     break
@@ -116,17 +158,8 @@ class Breakthrough(Fighter):
                     sys.exit(0)
                 if result == 1:
                     victories += 1
-                    self.max_victories -= 1
-                self.log.writewarning("当前挑战次数->"+str(i+1)+"，当前成功突破次数->"+str(victories))
+                    self.max_tasks -= 1
+                self.log.writewarning("当前挑战次数->" + str(i + 1) + "，当前成功突破次数->" + str(victories))
 
             # 刷新页面
             self.refresh()
-
-            # 最大突破数小于3就不进行下一轮了
-            if self.max_victories < 3:
-                self.log.writewarning("任务结束")
-                break
-
-
-
-
